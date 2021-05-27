@@ -101,12 +101,11 @@ def assign_clades(clade_designations, all_muts, tree, ref=None):
         mapping of node to clades
     '''
 
-    clade_membership = {}
+    # We use the following dictionaries to store which clade nodes belong to.
+    # All nodes in a clade should appear in `clade_membership` while only one node should
+    # appear in `basal_clade_nodes`
+    (clade_membership, basal_clade_nodes) = ({}, {})
     parents = get_parent_name_by_child_name_for_tree(tree)
-
-    # first pass to set all nodes to unassigned as precaution to ensure attribute is set
-    for node in tree.find_clades(order = 'preorder'):
-        clade_membership[node.name] = {'clade_membership': 'unassigned'}
 
     # count leaves
     for node in tree.find_clades(order = 'postorder'):
@@ -136,7 +135,7 @@ def assign_clades(clade_designations, all_muts, tree, ref=None):
                     node.sequences[gene][pos] = d
 
 
-    # second pass to assign 'clade_annotation' to basal nodes within each clade
+    # store names of basal nodes of each clade in `basal_clade_nodes` and `clade_membership` dicts.
     # if multiple nodes match, assign annotation to largest
     # otherwise occasional unwanted cousin nodes get assigned the annotation
     for clade_name, clade_alleles in clade_designations.items():
@@ -147,16 +146,17 @@ def assign_clades(clade_designations, all_muts, tree, ref=None):
         sorted_nodes = sorted(node_counts, key=lambda x: x.leaf_count, reverse=True)
         if len(sorted_nodes) > 0:
             target_node = sorted_nodes[0]
-            clade_membership[target_node.name] = {'clade_annotation': clade_name, 'clade_membership': clade_name}
+            basal_clade_nodes[target_node.name] = clade_name
+            clade_membership[target_node.name] = clade_name # basal nodes are members of the clade
 
-    # third pass to propagate 'clade_membership'
+    # propagate 'clade_membership' to children nodes
     # don't propagate if encountering 'clade_annotation'
     for node in tree.find_clades(order = 'preorder'):
         for child in node:
-            if 'clade_annotation' not in clade_membership[child.name]:
-                clade_membership[child.name]['clade_membership'] = clade_membership[node.name]['clade_membership']
-
-    return clade_membership
+            # if the child doesn't define the start of its own clade, but the parent belongs to a clade, then inherit that membership
+            if child.name not in basal_clade_nodes and node.name in clade_membership:
+                clade_membership[child.name] = clade_membership[node.name]
+    return (basal_clade_nodes, clade_membership)
 
 
 def get_reference_sequence_from_root_node(all_muts, root_name):
@@ -181,6 +181,7 @@ def register_arguments(parser):
     parser.add_argument('--mutations', nargs='+', help='JSON(s) containing ancestral and tip nucleotide and/or amino-acid mutations ')
     parser.add_argument('--reference', nargs='+', help='fasta files containing reference and tip nucleotide and/or amino-acid sequences ')
     parser.add_argument('--clades', type=str, help='TSV file containing clade definitions by amino-acid')
+    parser.add_argument('--attribute-name', type=str, default="clade", help="name to use for clade membership & branch labels", required=False)
     parser.add_argument('--output-node-data', type=str, help='name of JSON file to save clade assignments to')
 
 
@@ -205,8 +206,14 @@ def run(args):
 
     clade_designations = read_in_clade_definitions(args.clades)
 
-    clade_membership = assign_clades(clade_designations, all_muts, tree, ref)
+    (basal_clade_nodes, clade_membership) = assign_clades(clade_designations, all_muts, tree, ref)
+
+    # create node_data for export as a JSON
+    node_data = {
+      'nodes': {node: {args.attribute_name: clade} for node,clade in clade_membership.items()},
+      'branches': {node: {'labels': {args.attribute_name: clade}} for node,clade in basal_clade_nodes.items()}
+    }
 
     out_name = get_json_name(args)
-    write_json({'nodes': clade_membership}, out_name)
-    print("clades written to", out_name, file=sys.stdout)
+    write_json(node_data, out_name)
+    print(f"clades written to {out_name} using attribute name {args.attribute_name}", file=sys.stdout)

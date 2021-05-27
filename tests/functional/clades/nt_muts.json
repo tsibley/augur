@@ -1,0 +1,19 @@
+{
+  "nodes": {
+    "tipA": {"muts": [], "aa_muts": {}},
+    "tipB": {"muts": [], "aa_muts": {}},
+    "tipC": {"muts": [], "aa_muts": {}},
+    "tipD": {"muts": [], "aa_muts": {}},
+    "tipE": {"muts": ["A3E"], "aa_muts": {}},
+    "tipF": {"muts": [], "aa_muts": {}},
+    "internalBC": {
+      "muts": ["A1B", "A2C"],
+      "aa_muts": {}
+    },
+    "internalDEF": {
+      "muts": ["A2C"],
+      "aa_muts": {}
+    },
+    "ROOT":{"muts": [], "aa_muts": {}}
+  }
+}

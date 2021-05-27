@@ -92,17 +92,9 @@ def are_mutations_defined(node_attrs):
             return True
     return False
 
-
-def are_clades_defined(node_attrs):
+def is_node_attr_defined(node_attrs, attr_name):
     for node, data in node_attrs.items():
-        if data.get("clade_membership") or data.get("clade_annotation"):
-            return True
-    return False
-
-
-def are_dates_defined(node_attrs):
-    for node, data in node_attrs.items():
-        if data.get("num_date"):
+        if data.get(attr_name):
             return True
     return False
 
@@ -163,7 +155,7 @@ def set_colorings(data_json, config, command_line_colorings, metadata_names, nod
     def _get_type(key, trait_values):
         # for some keys we know what the type must be
         known_types = {
-            "clade_membership": "categorical",
+            "clade": "categorical",
             "gt": "categorical",
             "author": "categorical",
             "num_date": "continuous"
@@ -200,7 +192,7 @@ def set_colorings(data_json, config, command_line_colorings, metadata_names, nod
             return config_title
 
         # hardcoded fallbacks:
-        if key == "clade_membership":
+        if key == "clade":
             return "Clade"
         if key == "gt":
             return "Genotype"
@@ -310,6 +302,12 @@ def set_colorings(data_json, config, command_line_colorings, metadata_names, nod
         if key == "gt" and not are_mutations_defined(node_attrs):
             warn("[colorings] You asked for mutations (\"gt\"), but none are defined on the tree. They cannot be used as a coloring.")
             return False
+        if key == "clade_membership" and not trait_values:
+            # augur 12 & below defined clades via the key "clade_membership", not "clade".
+            # If an auspice_config file specifies this, and it is not present in any node-data, we print a warning.
+            # (Note that if "clade" is present in node-data, we automatically include it as a colouring.)
+            warn("You asked for a color-by for 'clade_membership' but this is now called 'clade'. You should update your auspice config file.")
+            return False
         if key != "gt" and not trait_values:
             warn("You asked for a color-by for trait '{}', but it has no values on the tree. It has been ignored.".format(key))
             return False
@@ -348,11 +346,10 @@ def set_colorings(data_json, config, command_line_colorings, metadata_names, nod
         # add in genotype as a special case if (a) not already set and (b) the data supports it
         if "gt" not in explicitly_defined_colorings and are_mutations_defined(node_attrs):
             colorings.insert(0,{'key':'gt'})
-        if "num_date" not in explicitly_defined_colorings and are_dates_defined(node_attrs):
+        if "num_date" not in explicitly_defined_colorings and is_node_attr_defined(node_attrs, "num_date"):
             colorings.insert(0,{'key':'num_date'})
-        if "clade_membership" not in explicitly_defined_colorings and are_clades_defined(node_attrs):
-            colorings.insert(0,{'key':'clade_membership'})
-
+        if "clade" not in explicitly_defined_colorings and is_node_attr_defined(node_attrs, "clade"):
+            colorings.insert(0,{'key':'clade'})
         return colorings
 
 
@@ -714,8 +711,6 @@ def node_data_prop_is_normal_trait(name):
     # those traits / keys / attrs which are not "special" and can be exported
     # as normal attributes on nodes
     excluded = [
-        "clade_annotation", # Clade annotation is label, not colorby!
-        "clade_membership", # will be auto-detected if it is available
         "authors",          # authors are set as a node property, not a trait property
         "author",           # see above
         "vaccine",          # vaccine info is stored as a "special" node prop
@@ -914,16 +909,6 @@ def transfer_mutations_to_branches(node_attrs, branch_attrs):
                     else:
                         branch_attrs[node_name]["labels"] = { "aa": aa_lab }
 
-def transfer_clade_annotation_to_branches(node_attrs, branch_attrs):
-    for node_name, raw_data in node_attrs.items():
-        if "clade_annotation" in raw_data and is_valid(raw_data["clade_annotation"]):
-            if node_name not in branch_attrs:
-                branch_attrs[node_name] = {}
-            if 'labels' in branch_attrs[node_name]:
-                branch_attrs[node_name]["labels"]['clade'] = raw_data["clade_annotation"]
-            else:
-                branch_attrs[node_name]["labels"] = { "clade": raw_data["clade_annotation"] }
-
 def transfer_branch_data_to_branch_attrs(branches_node_data, branch_attrs):
     """
     Transfers information stored in node-data JSONs under "branches" to the `branch_attrs`.
@@ -968,12 +953,11 @@ def parse_node_data_and_metadata(T, node_data_files, metadata_file):
                 node_attrs[name][corrected_key] = value
                 node_data_names.add(corrected_key)
 
-    # third pass: create `branch_attrs` which includes certain traits supplied in `node_attrs`
-    # (e.g. mutations are coverted to branch attrs, and `clade_annotation` is interpreted as a label)
+    # third pass: create `branch_attrs` which includes a few special-case traits from in `node_attrs`
+    # (e.g. mutations are coverted from node attrs to branch attrs)
     # as well as any branch labels supplied in node-data files.
     branch_attrs = {}
     transfer_mutations_to_branches(node_attrs, branch_attrs)
-    transfer_clade_annotation_to_branches(node_attrs, branch_attrs)
     transfer_branch_data_to_branch_attrs(node_data.get('branches', {}), branch_attrs)
 
     return (node_data, node_attrs, node_data_names, metadata_names, branch_attrs)

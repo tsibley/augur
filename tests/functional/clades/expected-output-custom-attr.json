@@ -1,0 +1,46 @@
+{
+  "branches": {
+    "internalBC": {
+      "labels": {
+        "custom": "cladeCB"
+      }
+    },
+    "internalDEF": {
+      "labels": {
+        "custom": "cladeDEF"
+      }
+    },
+    "tipE": {
+      "labels": {
+        "custom": "cladeE"
+      }
+    }
+  },
+  "generated_by": {
+    "program": "augur",
+    "version": "12.0.0"
+  },
+  "nodes": {
+    "internalBC": {
+      "custom": "cladeCB"
+    },
+    "internalDEF": {
+      "custom": "cladeDEF"
+    },
+    "tipB": {
+      "custom": "cladeCB"
+    },
+    "tipC": {
+      "custom": "cladeCB"
+    },
+    "tipD": {
+      "custom": "cladeDEF"
+    },
+    "tipE": {
+      "custom": "cladeE"
+    },
+    "tipF": {
+      "custom": "cladeDEF"
+    }
+  }
+}

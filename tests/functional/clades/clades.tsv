@@ -1,0 +1,12 @@
+clade	gene	site	alt
+
+# the 1b mutation only once, on the branch leading to tips B and C
+# thus we expect the clade label to be on node `internalAB`
+cladeCB	nuc	1	B
+# the 2c mutation appears twice -- on branch `internalAB` and `internalDEF`
+# as the latter has 3 descendants, it is chosen over the former
+cladeDEF	nuc	2	C
+# mutation 3e appears only on a terminal node (tipE)
+# but we still expect both a branch label and a node_attr
+# this means that tipE should be annotated "cladeE" and _not_ "cladeDEF"
+cladeE	nuc	3	E
