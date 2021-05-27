@@ -1,0 +1,19 @@
+{
+  "branches": {
+    "ROOT": {
+      "labels": {
+        "fruit": "apple"
+      }
+    },
+    "tipA": {
+      "labels": {
+        "fruit": "orange"
+      }
+    },
+    "internalBC": {
+      "labels": {
+        "vegetable": "pumpkin"
+      }
+    }
+  }
+}

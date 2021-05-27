@@ -31,3 +31,15 @@ Export with auspice config JSON which defines scale & legend settings
   $ python3 "$TESTDIR/../../scripts/diff_jsons.py"  export_v2/dataset1.json "$TMP/dataset1.json" \
   >   --exclude-paths "root['meta']['updated']"
   {}
+
+Export using a node-data file defining branch labels.
+(Since there are no colorings, this fails validation, which is why we have an exit code of 2)
+  $ ${AUGUR} export v2 \
+  >   --tree export_v2/tree.nwk \
+  >   --node-data export_v2/div_node-data.json export_v2/branch-labels.json \
+  >   --output "$TMP/dataset-with-branch-labels.json" &>/dev/null
+  [2]
+
+  $ python3 "$TESTDIR/../../scripts/diff_jsons.py"  export_v2/dataset-with-branch-labels.json "$TMP/dataset-with-branch-labels.json" \
+  >   --exclude-paths "root['meta']['updated']"
+  {}

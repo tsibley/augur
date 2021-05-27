@@ -618,10 +618,23 @@ def create_author_data(node_attrs):
 
     return node_author_info
 
+def set_branch_attrs_on_tree(data_json, branch_attrs):
+    """
+    Shifts the provided `branch_attrs` onto the (auspice) `data_json`.
+    Currently all data is transferred, there is no way for (e.g.) the set of exported
+    labels to be restricted by the user in a config.
+    """
+    def _recursively_set_data(node):
+        if node['name'] in branch_attrs:
+            node['branch_attrs'] = branch_attrs[node['name']]
+        for child in node.get("children", []):
+            _recursively_set_data(child)
+    _recursively_set_data(data_json["tree"])
+
 
 def set_node_attrs_on_tree(data_json, node_attrs):
     '''
-    Assign desired colorings, metadata etc to the tree structure
+    Assign desired colorings, metadata etc to the `node_attrs` of nodes in the tree
 
     Parameters
     ----------
@@ -632,32 +645,9 @@ def set_node_attrs_on_tree(data_json, node_attrs):
 
     author_data = create_author_data(node_attrs)
 
-    def _transfer_mutations(node, raw_data):
-        if "aa_muts" in raw_data or "muts" in raw_data:
-            node["branch_attrs"]["mutations"] = {}
-            if "muts" in raw_data and len(raw_data["muts"]):
-                node["branch_attrs"]["mutations"]["nuc"] = raw_data["muts"]
-            if "aa_muts" in raw_data:
-                aa = {gene:data for gene, data in raw_data["aa_muts"].items() if len(data)}
-                node["branch_attrs"]["mutations"].update(aa)
-                #convert mutations into a label
-                if aa:
-                    aa_lab = '; '.join("{!s}: {!s}".format(key,', '.join(val)) for (key,val) in aa.items())
-                    if 'labels' in node["branch_attrs"]:
-                        node["branch_attrs"]["labels"]["aa"] = aa_lab
-                    else:
-                        node["branch_attrs"]["labels"] = { "aa": aa_lab }
-
     def _transfer_vaccine_info(node, raw_data):
         if raw_data.get("vaccine"):
             node["node_attrs"]['vaccine'] = raw_data['vaccine']
-
-    def _transfer_labels(node, raw_data):
-        if "clade_annotation" in raw_data and is_valid(raw_data["clade_annotation"]):
-            if 'labels' in node["branch_attrs"]:
-                node["branch_attrs"]["labels"]['clade'] = raw_data["clade_annotation"]
-            else:
-                node["branch_attrs"]["labels"] = { "clade": raw_data["clade_annotation"] }
 
     def _transfer_hidden_flag(node, raw_data):
         hidden = raw_data.get("hidden", None)
@@ -707,9 +697,7 @@ def set_node_attrs_on_tree(data_json, node_attrs):
         # get all the available information for this particular node
         raw_data = node_attrs[node["name"]]
         # transfer "special cases"
-        _transfer_mutations(node, raw_data)
         _transfer_vaccine_info(node, raw_data)
-        _transfer_labels(node, raw_data)
         _transfer_hidden_flag(node, raw_data)
         _transfer_num_date(node, raw_data)
         _transfer_url_accession(node, raw_data)
@@ -907,6 +895,51 @@ def set_description(data_json, cmd_line_description_file):
     except FileNotFoundError:
         fatal("Provided desciption file {} does not exist".format(cmd_line_description_file))
 
+def transfer_mutations_to_branches(node_attrs, branch_attrs):
+    for node_name, raw_data in node_attrs.items():
+        if "aa_muts" in raw_data or "muts" in raw_data:
+            if node_name not in branch_attrs:
+                branch_attrs[node_name] = {}
+            branch_attrs[node_name]["mutations"] = {}
+            if "muts" in raw_data and len(raw_data["muts"]):
+                branch_attrs[node_name]["mutations"]["nuc"] = raw_data["muts"]
+            if "aa_muts" in raw_data:
+                aa = {gene:data for gene, data in raw_data["aa_muts"].items() if len(data)}
+                branch_attrs[node_name]["mutations"].update(aa)
+                #convert mutations into a label
+                if aa:
+                    aa_lab = '; '.join("{!s}: {!s}".format(key,', '.join(val)) for (key,val) in aa.items())
+                    if 'labels' in branch_attrs[node_name]:
+                        branch_attrs[node_name]["labels"]["aa"] = aa_lab
+                    else:
+                        branch_attrs[node_name]["labels"] = { "aa": aa_lab }
+
+def transfer_clade_annotation_to_branches(node_attrs, branch_attrs):
+    for node_name, raw_data in node_attrs.items():
+        if "clade_annotation" in raw_data and is_valid(raw_data["clade_annotation"]):
+            if node_name not in branch_attrs:
+                branch_attrs[node_name] = {}
+            if 'labels' in branch_attrs[node_name]:
+                branch_attrs[node_name]["labels"]['clade'] = raw_data["clade_annotation"]
+            else:
+                branch_attrs[node_name]["labels"] = { "clade": raw_data["clade_annotation"] }
+
+def transfer_branch_data_to_branch_attrs(branches_node_data, branch_attrs):
+    """
+    Transfers information stored in node-data JSONs under "branches" to the `branch_attrs`.
+    Currently this _only_ considers the "labels" defined on a branch, but other information
+    may be added in the future.
+    """
+    for node_name, branch_data in branches_node_data.items():
+        for label_name, label_value in branch_data.get("labels", {}).items():
+            if not is_valid(label_value):
+                continue
+            if node_name not in branch_attrs:
+                branch_attrs[node_name] = {}
+            if 'labels' not in branch_attrs[node_name]:
+                branch_attrs[node_name]["labels"] = {}
+            branch_attrs[node_name]["labels"][label_name] = label_value
+
 def parse_node_data_and_metadata(T, node_data_files, metadata_file):
     node_data = read_node_data(node_data_files) # node_data_files is an array of multiple files (or a single file)
     if metadata_file is not None:
@@ -935,7 +968,15 @@ def parse_node_data_and_metadata(T, node_data_files, metadata_file):
                 node_attrs[name][corrected_key] = value
                 node_data_names.add(corrected_key)
 
-    return (node_data, node_attrs, node_data_names, metadata_names)
+    # third pass: create `branch_attrs` which includes certain traits supplied in `node_attrs`
+    # (e.g. mutations are coverted to branch attrs, and `clade_annotation` is interpreted as a label)
+    # as well as any branch labels supplied in node-data files.
+    branch_attrs = {}
+    transfer_mutations_to_branches(node_attrs, branch_attrs)
+    transfer_clade_annotation_to_branches(node_attrs, branch_attrs)
+    transfer_branch_data_to_branch_attrs(node_data.get('branches', {}), branch_attrs)
+
+    return (node_data, node_attrs, node_data_names, metadata_names, branch_attrs)
 
 def get_config(args):
     if not args.auspice_config:
@@ -961,7 +1002,8 @@ def run_v2(args):
     # parse input files
     T = Phylo.read(args.tree, 'newick')
     try:
-        node_data, node_attrs, node_data_names, metadata_names = parse_node_data_and_metadata(T, args.node_data, args.metadata)
+        node_data, node_attrs, node_data_names, metadata_names, branch_attrs = \
+            parse_node_data_and_metadata(T, args.node_data, args.metadata)
     except FileNotFoundError:
         print(f"ERROR: meta data file ({args.metadata}) does not exist")
         sys.exit(2)
@@ -994,6 +1036,8 @@ def run_v2(args):
     # set tree structure
     data_json["tree"] = convert_tree_to_json_structure(T.root, node_attrs)
     set_node_attrs_on_tree(data_json, node_attrs)
+    set_branch_attrs_on_tree(data_json, branch_attrs)
+
     set_geo_resolutions(data_json, config, args.geo_resolutions, read_lat_longs(args.lat_longs), node_attrs)
     set_panels(data_json, config, args.panels)
     set_data_provenance(data_json, config)
