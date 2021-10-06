@@ -277,7 +277,7 @@ def filter_by_ambiguous_date(metadata, date_column="date", ambiguity="any"):
     return filtered
 
 
-def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
+def filter_by_date(metadata, date_column="date", min_date=None, max_date=None, min_date_offset=None, max_date_offset=None):
     """Filter metadata by minimum or maximum date.
 
     Parameters
@@ -290,11 +290,16 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
         Minimum date
     max_date : float
         Maximum date
+    min_date_offset : str
+        A valid ISO-8601 duration to subtract from the current date to produce a minimum date.
+    max_date_offset : str
+        A valid ISO-8601 duration to subtract from the current date to produce a maximum date.
 
     Returns
     -------
     set[str]:
         Strains that pass the filter
+
 
     >>> metadata = pd.DataFrame([{"region": "Africa", "date": "2020-01-01"}, {"region": "Europe", "date": "2020-01-02"}], index=["strain1", "strain2"])
     >>> filter_by_date(metadata, min_date=numeric_date("2020-01-02"))
@@ -313,6 +318,22 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
     >>> sorted(filter_by_date(metadata, date_column="missing_column", min_date=numeric_date("2020-01-02")))
     ['strain1', 'strain2']
 
+    Filter metadata by a min date offset. The offsets are subtracted from
+    today's date and converted to numeric dates. The following example looks for
+    strains collected no earlier than 10 weeks prior to today.
+
+    >>> strain1_date = (datetime.date.today() - datetime.timedelta(weeks=20)).strftime("%Y-%m-%d")
+    >>> strain2_date = (datetime.date.today() - datetime.timedelta(weeks=5)).strftime("%Y-%m-%d")
+    >>> metadata = pd.DataFrame([{"region": "Africa", "date": strain1_date}, {"region": "Europe", "date": strain2_date}], index=["strain1", "strain2"])
+    >>> filter_by_date(metadata, min_date_offset="10W")
+    {'strain2'}
+
+    Filter metadata by a max date offset. This example looks for strains
+    collected no later than 10 weeks prior to today.
+
+    >>> filter_by_date(metadata, max_date_offset="10W")
+    {'strain1'}
+
     """
     strains = set(metadata.index.values)
 
@@ -324,7 +345,11 @@ def filter_by_date(metadata, date_column="date", min_date=None, max_date=None):
     dates = get_numerical_dates(metadata, date_col=date_column, fmt="%Y-%m-%d")
     filtered = {strain for strain in strains if dates[strain] is not None}
 
-    if min_date:
+    if min_date or min_date_offset:
+        if min_date is None:
+            # Calculate the min date from today's date and the given offset value.
+            min_date = numeric_date((datetime.date.today() - pd.Timedelta(min_date_offset)).strftime("%Y-%m-%d"))
+
         filtered = {s for s in filtered if (np.isscalar(dates[s]) or all(dates[s])) and np.max(dates[s]) >= min_date}
 
     if max_date:
