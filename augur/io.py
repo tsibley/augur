@@ -81,8 +81,8 @@ def read_metadata(metadata_file, id_columns=("strain", "name"), chunk_size=None)
 
     """
     kwargs = {
-        "sep": None,
-        "engine": "python",
+        "sep": "\t",
+        "engine": "c",
         "skipinitialspace": True,
         "na_filter": False,
     }
