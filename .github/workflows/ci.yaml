@@ -23,8 +23,9 @@ jobs:
         channels: conda-forge,bioconda
         channel-priority: true
         activate-environment: test
-    - run: mamba install mafft raxml fasttree iqtree vcftools pip numpy
-    - run: pip install biopython==1.67
+    - run: mamba install mafft raxml fasttree iqtree vcftools pip
+    - if: matrix.python-version == 3.7
+      run: mamba install biopython==1.73 # earliest version supporting Python 3.7 https://github.com/biopython/biopython/blob/master/NEWS.rst#18-december-2018-biopython-173
     - run: pip install -e .[dev]
     - run: conda info
     - run: conda list
